@@ -1,11 +1,19 @@
 return {
-  { "navarasu/onedark.nvim" },
+  {
+    "creator54/onedark.nvim",
+    config = function()
+      require("onedark").setup({
+        style = 'darker'
+      })
+      require("onedark").load()
+    end,
+  },
   {
     "jackMort/ChatGPT.nvim",
     config = function()
-    require("chatgpt").setup({
-    -- optional configuration
-    })
+      require("chatgpt").setup({
+      -- optional configuration
+      })
     end,
     dependencies = {
       "MunifTanjim/nui.nvim",
@@ -16,7 +24,7 @@ return {
   {
     "LazyVim/LazyVim",
     opts = {
-      colorscheme = "habamax",
+      colorscheme = "onedark",
     }
   }
 }
