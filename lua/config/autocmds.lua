@@ -8,4 +8,3 @@
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 vim.api.nvim_command("set termguicolors")
 vim.api.nvim_command("hi Normal guibg=#1C1C1C")
-
