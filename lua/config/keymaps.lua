@@ -10,9 +10,12 @@ vim.keymap.set("n", "<A-S-`>", "<cmd>:BufferLineCyclePrev<cr>", { desc = "Cycle 
 vim.keymap.set("n", "<C-d>", ":bd<CR>", { desc = "Close current buffer", noremap = true, silent = true })
 
 -- vim.keymap.set("n", "<A-r>", "<cmd>:Glow<cr>", { desc = "Open Glow with current file" })
-vim.api.nvim_set_keymap(
+vim.keymap.set(
   "n",
   "<A-r>",
   ":vsplit<CR>:lua vim.cmd('term glow ' .. vim.fn.expand('%:p') .. ' -p')<CR>:setlocal nonumber norelativenumber<CR>i<CR>",
   { desc = "Open Glow with current file in vertical split without line numbers", silent = true }
 )
+
+-- select all text
+vim.keymap.set("n", "<C-a>", "gg<S-v>G", { desc = "Select all text" })
