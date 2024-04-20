@@ -2,14 +2,14 @@ return {
   {
     "norcalli/nvim-colorizer.lua",
     config = function()
-      require('colorizer').setup()
+      require("colorizer").setup()
     end,
   },
   {
     "creator54/onedark.nvim",
     config = function()
       require("onedark").setup({
-        style = 'darker'
+        style = "darker",
       })
       require("onedark").load()
     end,
@@ -18,7 +18,7 @@ return {
     "jackMort/ChatGPT.nvim",
     config = function()
       require("chatgpt").setup({
-      -- optional configuration
+        -- optional configuration
       })
     end,
     dependencies = {
@@ -31,6 +31,7 @@ return {
     "LazyVim/LazyVim",
     opts = {
       colorscheme = "onedark",
-    }
-  }
+    },
+  },
+  { "ellisonleao/glow.nvim", config = true, cmd = "Glow" },
 }
