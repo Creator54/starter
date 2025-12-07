@@ -13,7 +13,6 @@ end
 
 keymap.set("n", "<A-u>", "<cmd>:Lazy update<cr>", opts("Lazy update"))
 keymap.set("n", "<A-S>", "<cmd>:Lazy sync<cr>", opts("Lazy update"))
-keymap.set("n", "<A-t>", "<cmd>:terminal<cr>i", opts("Open terminal buffer"))
 keymap.set("n", "<A-`>", "<cmd>:BufferLineCycleNext<cr>", opts("Cycle forwardthrough open buffers"))
 keymap.set("n", "<A-S-`>", "<cmd>:BufferLineCyclePrev<cr>", opts("Cycle backword through open buffers"))
 keymap.set("n", "<C-d>", ":bd<CR>", opts("Close current buffer"))
@@ -27,3 +26,34 @@ vim.keymap.set(
 )
 
 vim.keymap.set("n", "<C-a>", "gg<S-v>G", opts("Select all text"))
+-- Go back to the previous location (equivalent to :e # or Ctrl-o)
+vim.keymap.set("n", "gu", "<C-o>", opts("Go back to previous location"))
+-- Go forward to the next location in jump list
+vim.keymap.set("n", "gU", "<C-i>", opts("Go forward to next location"))
+
+-- Better window navigation
+vim.keymap.set("n", "<C-h>", "<C-w>h", opts("Go to left window"))
+vim.keymap.set("n", "<C-j>", "<C-w>j", opts("Go to lower window"))
+vim.keymap.set("n", "<C-k>", "<C-w>k", opts("Go to upper window"))
+vim.keymap.set("n", "<C-l>", "<C-w>l", opts("Go to right window"))
+
+-- Resize windows with arrow keys
+vim.keymap.set("n", "<Up>", ":resize +2<CR>", opts("Resize window up"))
+vim.keymap.set("n", "<Down>", ":resize -2<CR>", opts("Resize window down"))
+vim.keymap.set("n", "<Left>", ":vertical resize -2<CR>", opts("Resize window left"))
+vim.keymap.set("n", "<Right>", ":vertical resize +2<CR>", opts("Resize window right"))
+
+-- Quick save and quit
+vim.keymap.set("n", "<leader>w", "<cmd>w<CR>", opts("Save file"))
+vim.keymap.set("n", "<leader>q", "<cmd>q<CR>", opts("Quit buffer"))
+vim.keymap.set("n", "<leader>Q", "<cmd>qa<CR>", opts("Quit all"))
+
+-- Buffer navigation
+vim.keymap.set("n", "<S-l>", "<cmd>bnext<CR>", opts("Next buffer"))
+vim.keymap.set("n", "<S-h>", "<cmd>bprevious<CR>", opts("Previous buffer"))
+
+-- Clear search highlighting
+vim.keymap.set("n", "<leader><space>", "<cmd>nohlsearch<CR>", opts("Clear search highlights"))
+
+-- Toggle spelling
+vim.keymap.set("n", "<F8>", "<cmd>set spell!<CR>", opts("Toggle spelling"))
