@@ -37,11 +37,11 @@ vim.keymap.set("n", "<C-j>", "<C-w>j", opts("Go to lower window"))
 vim.keymap.set("n", "<C-k>", "<C-w>k", opts("Go to upper window"))
 vim.keymap.set("n", "<C-l>", "<C-w>l", opts("Go to right window"))
 
--- Resize windows with arrow keys
-vim.keymap.set("n", "<Up>", ":resize +2<CR>", opts("Resize window up"))
-vim.keymap.set("n", "<Down>", ":resize -2<CR>", opts("Resize window down"))
-vim.keymap.set("n", "<Left>", ":vertical resize -2<CR>", opts("Resize window left"))
-vim.keymap.set("n", "<Right>", ":vertical resize +2<CR>", opts("Resize window right"))
+-- Resize windows with Alt+arrow keys (avoid conflicts with cursor/statusline)
+vim.keymap.set("n", "<A-Up>", ":resize +2<CR>", opts("Resize window up"))
+vim.keymap.set("n", "<A-Down>", ":resize -2<CR>", opts("Resize window down"))
+vim.keymap.set("n", "<A-Left>", ":vertical resize -2<CR>", opts("Resize window left"))
+vim.keymap.set("n", "<A-Right>", ":vertical resize +2<CR>", opts("Resize window right"))
 
 -- Quick save and quit
 vim.keymap.set("n", "<leader>w", "<cmd>w<CR>", opts("Save file"))
