@@ -1,16 +1,15 @@
 return {
   {
     "nvim-treesitter/nvim-treesitter",
-    opts = {
-      highlight = {
-        disable = { "neo-tree" },
-      },
-    },
+    opts = function(_, opts)
+      opts.highlight = opts.highlight or {}
+      opts.highlight.disable = function(lang, buf)
+        return lang == "neo-tree" or vim.bo[buf].filetype == "neo-tree"
+      end
+    end,
   },
   {
     "nvim-treesitter/nvim-treesitter-context",
-    opts = {
-      exclude = { "neo-tree" },
-    },
+    enabled = false,
   },
 }
