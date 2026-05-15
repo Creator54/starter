@@ -7,4 +7,10 @@ return {
       },
     },
   },
+  {
+    "nvim-treesitter/nvim-treesitter-context",
+    opts = {
+      exclude = { "neo-tree" },
+    },
+  },
 }
