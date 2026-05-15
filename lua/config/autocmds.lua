@@ -175,3 +175,13 @@ vim.api.nvim_create_autocmd("User", {
   pattern = "LazyVimStarted",
   callback = clear_bg,
 })
+
+-- Disable Treesitter for Neo-tree to prevent "No treesitter parser" warnings
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "neo-tree",
+  callback = function()
+    pcall(vim.cmd, "TSBufDisable highlight")
+    pcall(vim.cmd, "TSBufDisable indent")
+    pcall(vim.cmd, "TSBufDisable incremental_selection")
+  end,
+})
