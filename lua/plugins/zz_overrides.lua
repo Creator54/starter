@@ -122,20 +122,88 @@ return {
           local should_restore = (argc == 0) or (argc == 1 and vim.fn.isdirectory(vim.fn.argv(0)) == 1)
 
           if should_restore and not vim.g.started_with_stdin then
+            -- 1. Close any Neo-tree windows that hijacked startup
+            pcall(vim.cmd, "Neotree close")
+
+            -- 2. Wipe out any directory buffers loaded during startup
+            for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+              if vim.api.nvim_buf_is_valid(buf) then
+                local name = vim.api.nvim_buf_get_name(buf)
+                if name ~= "" and vim.fn.isdirectory(name) == 1 then
+                  pcall(vim.api.nvim_buf_delete, buf, { force = true })
+                end
+              end
+            end
+
+            -- 3. Load the session on a clean window
             require("persistence").load()
           end
         end,
         nested = true,
       })
 
+      -- Clean up any extra empty/nameless or directory buffers after session restore
+      local function cleanup_empty_buffers()
+        vim.defer_fn(function()
+          for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buf) then
+              local name = vim.api.nvim_buf_get_name(buf)
+              local buftype = vim.api.nvim_get_option_value("buftype", { buf = buf })
+              local modified = vim.api.nvim_get_option_value("modified", { buf = buf })
+              local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+              -- Wipe nameless empty buffers
+              local is_empty = name == "" and buftype == "" and not modified and #lines == 1 and lines[1] == ""
+              -- Wipe directory buffers (netrw listings)
+              local is_dir = name ~= "" and vim.fn.isdirectory(name) == 1
+
+              if is_empty or is_dir then
+                pcall(vim.api.nvim_buf_delete, buf, { force = true })
+              end
+            end
+          end
+
+          -- Restore focus to the last active file before quit
+          local last_file = vim.g.SessionLastFile
+          if last_file and last_file ~= "" and vim.fn.filereadable(last_file) == 1 then
+            local target_buf = vim.fn.bufnr(last_file)
+            if target_buf ~= -1 and vim.api.nvim_buf_is_valid(target_buf) then
+              pcall(vim.api.nvim_set_current_buf, target_buf)
+            end
+          end
+        end, 200)
+      end
+
+      vim.api.nvim_create_autocmd({ "SessionLoadPost", "User" }, {
+        group = vim.api.nvim_create_augroup("SessionCleanup", { clear = true }),
+        pattern = { "*", "PersistenceLoadPost" },
+        callback = cleanup_empty_buffers,
+      })
+
       -- BULLETPROOF <leader>Q
       -- Register it multiple times to ensure we win
       local function apply_quit_fix()
         vim.keymap.set("n", "<leader>Q", function()
-          -- Save everything
+          -- 1. Store the active file path to preserve focus on restore
+          vim.g.SessionLastFile = vim.fn.expand("%:p")
+
+          -- 2. Wipe directory buffers so they don't pollute the session file
+          for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buf) then
+              local name = vim.api.nvim_buf_get_name(buf)
+              if name ~= "" and vim.fn.isdirectory(name) == 1 then
+                pcall(vim.api.nvim_buf_delete, buf, { force = true })
+              end
+            end
+          end
+
+          -- 3. Save the perfect session state
           pcall(function() require("persistence").save() end)
+          -- 4. Deactivate persistence auto-save to prevent qa! from overwriting it on exit
+          pcall(function() require("persistence").stop() end)
+          -- 5. Save all files to disk
           vim.cmd("silent! wa")
-          -- Final check: if we are still modified, something is wrong
+          -- 6. Quit Neovim safely and forcefully
           vim.cmd("qa!")
         end, { desc = "Save and Quit (Nix-Systems)", noremap = true, silent = true })
       end
