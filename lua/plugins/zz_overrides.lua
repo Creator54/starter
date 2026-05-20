@@ -29,6 +29,12 @@ return {
   -- 4. NEO-TREE (Cleaner UI)
   {
     "nvim-neo-tree/neo-tree.nvim",
+    init = function()
+      -- Delete LazyVim's auto-start augroup to prevent neo-tree from loading
+      -- before VimEnter. This eliminates the race between neo-tree's 10ms
+      -- debounced hijack and our session restore.
+      pcall(vim.api.nvim_del_augroup_by_name, "Neotree_start_directory")
+    end,
     opts = {
       window = {
         mappings = {
@@ -90,7 +96,7 @@ return {
       -- Force options
       vim.opt.autowrite = true
       vim.opt.autowriteall = true
-      vim.opt.sessionoptions = "curdir,buffers,tabpages,winsize,help,globals,folds,terminal"
+      vim.opt.sessionoptions = "curdir,buffers,tabpages,help,globals,folds,terminal"
       vim.opt.winbar = "" -- KEEP WINBAR DISABLED (avoid double header)
 
       -- FORCE DISABLE WINBAR on neo-tree (This kills the "Neo-tree" text)
@@ -105,27 +111,29 @@ return {
         end,
       })
 
+      -- CLEAN STATE BEFORE ANY SESSION SAVE
+      vim.api.nvim_create_autocmd("VimLeavePre", {
+        group = vim.api.nvim_create_augroup("SessionPreSave", { clear = true }),
+        callback = function()
+          pcall(vim.cmd, "Neotree close")
+          pcall(vim.cmd, "%argdelete")
+        end,
+      })
+
       -- AUTO-RESTORE
       vim.api.nvim_create_autocmd("VimEnter", {
         group = vim.api.nvim_create_augroup("NixAutoRestore", { clear = true }),
         callback = function()
           local cwd = vim.fn.getcwd()
-          -- Don't restore if cwd is empty, root directory, or temp directory
           if cwd == "" or cwd == "/" or cwd == "/tmp" then
             return
           end
 
-          -- Allow restore if:
-          -- 1. No arguments are passed (nvim)
-          -- 2. Exactly one directory argument is passed (nvim .)
           local argc = vim.fn.argc()
           local should_restore = (argc == 0) or (argc == 1 and vim.fn.isdirectory(vim.fn.argv(0)) == 1)
 
           if should_restore and not vim.g.started_with_stdin then
-            -- 1. Close any Neo-tree windows that hijacked startup
-            pcall(vim.cmd, "Neotree close")
-
-            -- 2. Wipe out any directory buffers loaded during startup
+            -- Wipe any directory buffers from startup (netrw listings)
             for _, buf in ipairs(vim.api.nvim_list_bufs()) do
               if vim.api.nvim_buf_is_valid(buf) then
                 local name = vim.api.nvim_buf_get_name(buf)
@@ -135,8 +143,17 @@ return {
               end
             end
 
-            -- 3. Load the session on a clean window
-            require("persistence").load()
+            -- Restore session if one exists
+            local session_file = vim.fn.stdpath("state") .. "/sessions/"
+              .. cwd:gsub("/", "%%") .. ".vim"
+            if vim.fn.filereadable(session_file) == 1 then
+              require("persistence").load()
+            end
+
+            -- Open Neo-tree sidebar after everything settles
+            vim.defer_fn(function()
+              pcall(vim.cmd, "Neotree show")
+            end, 300)
           end
         end,
         nested = true,
@@ -171,13 +188,20 @@ return {
               pcall(vim.api.nvim_set_current_buf, target_buf)
             end
           end
+
         end, 200)
       end
 
-      vim.api.nvim_create_autocmd({ "SessionLoadPost", "User" }, {
+      vim.api.nvim_create_autocmd("SessionLoadPost", {
         group = vim.api.nvim_create_augroup("SessionCleanup", { clear = true }),
-        pattern = { "*", "PersistenceLoadPost" },
         callback = cleanup_empty_buffers,
+        once = true,
+      })
+      vim.api.nvim_create_autocmd("User", {
+        group = "SessionCleanup",
+        pattern = "PersistenceLoadPost",
+        callback = cleanup_empty_buffers,
+        once = true,
       })
 
       -- BULLETPROOF <leader>Q
@@ -187,7 +211,11 @@ return {
           -- 1. Store the active file path to preserve focus on restore
           vim.g.SessionLastFile = vim.fn.expand("%:p")
 
-          -- 2. Wipe directory buffers so they don't pollute the session file
+          -- 2. Close Neo-tree and clear arglist
+          pcall(vim.cmd, "Neotree close")
+          pcall(vim.cmd, "%argdelete")
+
+          -- 3. Wipe directory buffers so they don't pollute the session file
           for _, buf in ipairs(vim.api.nvim_list_bufs()) do
             if vim.api.nvim_buf_is_valid(buf) then
               local name = vim.api.nvim_buf_get_name(buf)
