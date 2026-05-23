@@ -1,16 +1,22 @@
 -- High-priority overrides for auto-save and session persistence
 
+local is_scrollback = function()
+  return vim.env.KITTY_SCROLLBACK_NVIM == "true"
+end
+
 return {
-  -- 1. PERSISTENCE
+  -- 1. PERSISTENCE (Disable in scrollback mode)
   {
     "folke/persistence.nvim",
+    enabled = function() return not is_scrollback() end,
     event = "BufReadPre",
     opts = { options = { "buffers", "curdir", "tabpages", "winsize", "help", "globals", "skiprtp" } },
   },
 
-  -- 2. AUTO-SAVE
+  -- 2. AUTO-SAVE (Disable in scrollback mode)
   {
     "Pocco81/auto-save.nvim",
+    enabled = function() return not is_scrollback() end,
     event = { "InsertLeave", "TextChanged" },
     opts = {
       debounce_delay = 135,
@@ -26,9 +32,10 @@ return {
     },
   },
 
-  -- 4. NEO-TREE (Cleaner UI)
+  -- 4. NEO-TREE (Disable in scrollback mode)
   {
     "nvim-neo-tree/neo-tree.nvim",
+    enabled = function() return not is_scrollback() end,
     init = function()
       -- Delete LazyVim's auto-start augroup to prevent neo-tree from loading
       -- before VimEnter. This eliminates the race between neo-tree's 10ms
@@ -50,9 +57,10 @@ return {
     },
   },
 
-  -- 4. BUFFERLINE (The actual file name header)
+  -- 4. BUFFERLINE (Disable in scrollback mode)
   {
     "akinsho/bufferline.nvim",
+    enabled = function() return not is_scrollback() end,
     opts = function(_, opts)
       opts.options = opts.options or {}
       -- Enable path context in tabs when filenames are ambiguous
@@ -89,7 +97,13 @@ return {
     end,
   },
 
-  -- 5. BRUTE FORCE OVERRIDES
+  -- 5. LUALINE (Disable in scrollback mode)
+  {
+    "nvim-lualine/lualine.nvim",
+    enabled = function() return not is_scrollback() end,
+  },
+
+  -- 6. BRUTE FORCE OVERRIDES
   {
     "LazyVim/LazyVim",
     init = function()
@@ -99,10 +113,25 @@ return {
       vim.opt.sessionoptions = "curdir,buffers,tabpages,help,globals,folds,terminal"
       vim.opt.winbar = "" -- KEEP WINBAR DISABLED (avoid double header)
 
+      -- STRIP UI IF IN SCROLLBACK MODE
+      if is_scrollback() then
+        vim.opt.laststatus = 0
+        vim.opt.showtabline = 0
+        vim.opt.number = false
+        vim.opt.relativenumber = false
+        vim.opt.signcolumn = "no"
+        vim.opt.foldcolumn = "0"
+        vim.opt.winbar = ""
+        vim.g.lualine_enabled = false
+      end
+
       -- FORCE DISABLE WINBAR on neo-tree (This kills the "Neo-tree" text)
       vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter", "WinEnter" }, {
         pattern = "neo-tree",
         callback = function()
+          if is_scrollback() then
+            return
+          end
           vim.schedule(function()
             vim.opt_local.winbar = ""
             -- Force redraw
@@ -115,6 +144,9 @@ return {
       vim.api.nvim_create_autocmd("VimLeavePre", {
         group = vim.api.nvim_create_augroup("SessionPreSave", { clear = true }),
         callback = function()
+          if is_scrollback() then
+            return
+          end
           pcall(vim.cmd, "Neotree close")
           pcall(vim.cmd, "%argdelete")
         end,
@@ -124,6 +156,9 @@ return {
       vim.api.nvim_create_autocmd("VimEnter", {
         group = vim.api.nvim_create_augroup("NixAutoRestore", { clear = true }),
         callback = function()
+          if is_scrollback() then
+            return
+          end
           local cwd = vim.fn.getcwd()
           if cwd == "" or cwd == "/" or cwd == "/tmp" then
             return
