@@ -369,29 +369,45 @@ function M.prompt_create()
   end)
 end
 
--- Creates a new worktree
 function M.create_worktree(name)
   if not name or name == "" then
     return
   end
-  local worktrees = M.get_worktrees()
-  local base_wt = nil
-  for _, wt in ipairs(worktrees) do
-    if wt.is_current then
-      base_wt = wt
-      break
-    end
-  end
-  if not base_wt then
-    base_wt = worktrees[1]
-  end
-  if not base_wt then
-    vim.notify("No active worktree found", vim.log.levels.ERROR, { title = "Git Worktree" })
+
+  local default_path = M.get_default_worktree_path()
+  if not default_path then
+    vim.notify("Default worktree path not found", vim.log.levels.ERROR, { title = "Git Worktree" })
     return
   end
 
-  local parent_dir = vim.fn.fnamemodify(base_wt.path, ":h")
-  local new_path = parent_dir .. "/" .. name
+  local git_dir = default_path .. "/.git"
+  local worktrees_dir
+  if vim.fn.isdirectory(git_dir) == 1 then
+    worktrees_dir = git_dir .. "/worktrees-checkouts"
+  else
+    worktrees_dir = default_path .. "/.worktrees"
+  end
+  vim.fn.mkdir(worktrees_dir, "p")
+
+  -- Ensure fallback path is in local git exclude to keep git status clean locally
+  if worktrees_dir == default_path .. "/.worktrees" then
+    local exclude_file = default_path .. "/.git/info/exclude"
+    local f = io.open(exclude_file, "r")
+    local content = ""
+    if f then
+      content = f:read("*all")
+      f:close()
+    end
+    if not content:find("%.worktrees/?") then
+      f = io.open(exclude_file, "a")
+      if f then
+        f:write("\n# Local git worktrees\n.worktrees/\n")
+        f:close()
+      end
+    end
+  end
+
+  local new_path = worktrees_dir .. "/" .. name
 
   if vim.fn.isdirectory(new_path) == 1 then
     vim.notify("Directory already exists at " .. new_path, vim.log.levels.ERROR, { title = "Git Worktree" })
