@@ -7,23 +7,46 @@ local M = {}
 -- --------------------------------------------------------------------------
 local _registry_file = vim.fn.stdpath("data") .. "/tmux_term_registry.json"
 
-local function _load_registry()
-  local ok, content = pcall(vim.fn.readfile, _registry_file)
-  if not ok or #content == 0 then
-    return { counter = 0, tabs = {} }
-  end
-  local ok2, data = pcall(vim.fn.json_decode, table.concat(content, "\n"))
-  if not ok2 then
-    return { counter = 0, tabs = {} }
-  end
-  return data or { counter = 0, tabs = {} }
-end
-
 local function _save_registry(data)
   local ok, json = pcall(vim.fn.json_encode, data)
   if ok then
     pcall(vim.fn.writefile, { json }, _registry_file)
   end
+end
+
+local function _load_registry()
+  local ok, content = pcall(vim.fn.readfile, _registry_file)
+  local data
+  if not ok or #content == 0 then
+    data = { counter = 0, tabs = {} }
+  else
+    local ok2, decoded = pcall(vim.fn.json_decode, table.concat(content, "\n"))
+    if ok2 and decoded then
+      data = decoded
+    else
+      data = { counter = 0, tabs = {} }
+    end
+  end
+
+  -- Prune non-existent local directories to prevent monotonic registry growth
+  local modified = false
+  if data.tabs then
+    for id_str, info in pairs(data.tabs) do
+      if info.cwd then
+        local is_remote = (info.cwd:sub(1, 12) == "/tmp/sshfs/")
+        if not is_remote and vim.fn.isdirectory(info.cwd) ~= 1 then
+          data.tabs[id_str] = nil
+          modified = true
+        end
+      end
+    end
+  end
+
+  if modified then
+    _save_registry(data)
+  end
+
+  return data
 end
 
 -- --------------------------------------------------------------------------
@@ -173,16 +196,24 @@ local function get_terminal(direction, size)
   if ws.is_remote then
     local escaped_remote_cwd = ws.remote_cwd:gsub('"', '\\"')
     local remote_cmd = string.format(
-      "tmux has-session -t %s 2>/dev/null || (tmux new-session -d -s %s -c \"%s\" && tmux set -t %s status off); tmux attach -d -t %s",
-      name, name, escaped_remote_cwd, name, name
+      "if command -v tmux >/dev/null 2>&1; then " ..
+        "tmux has-session -t %s 2>/dev/null || (tmux new-session -d -s %s -c \"%s\" && tmux set -t %s status off); tmux attach -d -t %s; " ..
+      "else " ..
+        "cd \"%s\" && exec ${SHELL:-/bin/sh}; " ..
+      "fi",
+      name, name, escaped_remote_cwd, name, name, escaped_remote_cwd
     )
     local remote_cmd_wrapped = "sh -c " .. vim.fn.shellescape(remote_cmd)
     cmd = "ssh " .. ws.host .. " -t " .. vim.fn.shellescape(remote_cmd_wrapped)
     display_name = string.format("%s (%s)", ws.host, direction:sub(1,1):upper() .. direction:sub(2))
   else
     local local_cmd = string.format(
-      "tmux has-session -t %s 2>/dev/null || (tmux new-session -d -s %s -c %s && tmux set -t %s status off); tmux attach -d -t %s",
-      name, name, vim.fn.shellescape(ws.cwd), name, name
+      "if command -v tmux >/dev/null 2>&1; then " ..
+        "tmux has-session -t %s 2>/dev/null || (tmux new-session -d -s %s -c %s && tmux set -t %s status off); tmux attach -d -t %s; " ..
+      "else " ..
+        "cd %s && exec ${SHELL:-/bin/sh}; " ..
+      "fi",
+      name, name, vim.fn.shellescape(ws.cwd), name, name, vim.fn.shellescape(ws.cwd)
     )
     cmd = "sh -c " .. vim.fn.shellescape(local_cmd)
     display_name = string.format("Local (%s)", direction:sub(1,1):upper() .. direction:sub(2))
