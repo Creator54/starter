@@ -437,6 +437,17 @@ function M.delete_worktree(wt)
       else
         vim.notify("Deleted worktree and branch '" .. wt.branch .. "'", vim.log.levels.INFO, { title = "Git Worktree" })
       end
+
+      -- Kill associated tmux sessions
+      local hash = vim.fn.sha256(wt.path):sub(1, 8)
+      local sessions = vim.fn.systemlist("tmux list-sessions -F '#S' 2>/dev/null")
+      if vim.v.shell_error == 0 then
+        for _, session in ipairs(sessions) do
+          if session:sub(-#hash - 1) == "_" .. hash then
+            vim.fn.system("tmux kill-session -t " .. vim.fn.shellescape(session))
+          end
+        end
+      end
     end
 
     if wt.is_current then
@@ -546,7 +557,9 @@ function M.merge_worktree(wt)
         'echo -e "${PURPLE}[Phase 5/5] Cleaning up worktree and branch...${NC}"',
         'git worktree remove "' .. wt.path .. '"',
         'git branch -D "' .. wt.branch .. '"',
-        'echo -e "${GREEN}✓ Cleaned up feature worktree and branch.${NC}"',
+        'hash=$(echo -n "' .. wt.path .. '" | sha256sum | cut -c1-8)',
+        'tmux list-sessions -F "#S" 2>/dev/null | grep "_$hash$" | while read -r s; do tmux kill-session -t "$s"; done',
+        'echo -e "${GREEN}✓ Cleaned up feature worktree, branch, and active tmux sessions.${NC}"',
         'echo ""',
         'echo -e "${GREEN}=== Merge flow completed successfully! ===${NC}"',
       }, "\n")
