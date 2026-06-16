@@ -53,12 +53,78 @@ M.ui = {
         if not name or name == "" then
           name = (vim.uv or vim.loop).cwd() or vim.fn.expand("~")
         end
-        name = "%#St_cwd_text#" .. " " .. (name:match "([^/\\]+)[/\\]*$" or name) .. " "
+
+        local host = "local"
+        if vim.t.workspace_is_remote then
+          host = vim.t.workspace_host_name or "remote"
+          local mount_path = vim.t.workspace_mount_path
+          if mount_path then
+            local rel = name:sub(#mount_path + 1)
+            if rel:sub(1, 1) == "/" then
+              rel = rel:sub(2)
+            end
+            local remote_base = vim.t.workspace_remote_path or "~"
+            if remote_base == "~" then
+              remote_base = "$HOME"
+            end
+            if rel == "" then
+              name = remote_base
+            else
+              name = remote_base .. "/" .. rel
+            end
+            name = name:gsub("^$HOME", "~")
+          end
+        else
+          local ok_mp, MountPoint = pcall(require, "sshfs.lib.mount_point")
+          if ok_mp then
+            local active_mounts = MountPoint.list_active() or {}
+            for _, m in ipairs(active_mounts) do
+              if name:sub(1, #m.mount_path) == m.mount_path then
+                host = m.host or "remote"
+                local rel = name:sub(#m.mount_path + 1)
+                if rel:sub(1, 1) == "/" then
+                  rel = rel:sub(2)
+                end
+                local remote_base = m.remote_path or "~"
+                if remote_base == "~" then
+                  remote_base = "$HOME"
+                end
+                if rel == "" then
+                  name = remote_base
+                else
+                  name = remote_base .. "/" .. rel
+                end
+                name = name:gsub("^$HOME", "~")
+                break
+              end
+            end
+          end
+        end
+
+        if host == "local" then
+          local home = vim.fn.expand("~")
+          if name:sub(1, #home) == home then
+            name = "~" .. name:sub(#home + 1)
+          end
+        end
+
+        -- Shorten path if it's too long
+        local max_len = 30
+        if #name > max_len then
+          local parts = vim.split(name, "/")
+          if #parts > 3 then
+            local first = parts[1]
+            local last_two = { parts[#parts - 1], parts[#parts] }
+            name = first .. "/.../" .. table.concat(last_two, "/")
+          end
+        end
+
+        local display_text = host .. ":" .. name
+        name = "%#St_cwd_text#" .. " " .. display_text .. " "
         return (vim.o.columns > 85 and ("%#St_cwd_sep#" .. sep_l .. icon .. name)) or ""
       end,
     },
   },
-
 
   tabufline = {
     enabled = not is_scrollback(),
@@ -91,4 +157,3 @@ M.mason = {
 }
 
 return M
-
