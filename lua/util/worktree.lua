@@ -6,9 +6,13 @@ local _cache = {
   last_cwd = nil,
 }
 
--- Checks if a branch is a default branch (main or master)
+-- Checks if a branch is a default branch (main or master, or current main worktree branch)
 function M.is_default_branch(name)
-  return name == "main" or name == "master"
+  if name == "main" or name == "master" then
+    return true
+  end
+  local default_branch = M.get_default_branch()
+  return name == default_branch
 end
 
 -- Checks if the current directory is inside a git repository (cached per cwd)
@@ -217,24 +221,25 @@ function M.get_worktrees()
   local lines = vim.fn.systemlist("git worktree list --porcelain")
   local worktrees = {}
   local current_wt = nil
+  local wt_count = 0
 
   for _, line in ipairs(lines) do
     if line:sub(1, 9) == "worktree " then
       if current_wt then
         table.insert(worktrees, current_wt)
       end
+      wt_count = wt_count + 1
       current_wt = {
         path = line:sub(10),
         branch = nil,
         is_current = false,
-        is_default = false,
+        is_default = (wt_count == 1),
       }
     elseif line:sub(1, 7) == "branch " then
       local ref = line:sub(8)
       local branch = ref:match("refs/heads/(.*)")
       if branch and current_wt then
         current_wt.branch = branch
-        current_wt.is_default = M.is_default_branch(branch)
       end
     end
   end
