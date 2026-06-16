@@ -7,7 +7,6 @@ return {
       -- Default setup
       require("toggleterm").setup({
         size = 15,
-        open_mapping = [[<c-\>]],
         hide_numbers = true,
         shade_filetypes = {},
         shade_terminals = true,
@@ -28,31 +27,6 @@ return {
         },
       })
 
-      -- Single terminal instance that we'll reconfigure
-      local terminal = require("toggleterm.terminal").Terminal:new({
-        direction = "float",
-        size = 15,
-        on_open = function(term)
-          -- Set terminal keymaps
-          local opts = { buffer = 0 }
-          vim.keymap.set("t", "<C-\\><C-N>", [[<C-\><C-N>]], opts)
-          vim.keymap.set("t", "jk", [[<C-\><C-N>]], opts)
-          vim.keymap.set("t", "<C-h>", [[<C-\><C-N><C-w>h]], opts)
-          vim.keymap.set("t", "<C-j>", [[<C-\><C-N><C-w>j]], opts)
-          vim.keymap.set("t", "<C-k>", [[<C-\><C-N><C-w>k]], opts)
-          vim.keymap.set("t", "<C-l>", [[<C-\><C-N><C-w>l]], opts)
-          vim.keymap.set("t", "<C-w>", [[<C-\><C-N><C-w>]], opts)
-          -- Alt+h to switch to horizontal, Alt+t to toggle (close) the terminal
-          vim.keymap.set("t", "<A-h>", [[<C-\><C-N>:lua _G.toggleterm_toggle_direction("horizontal")<CR>]], opts)
-          vim.keymap.set("t", "<A-t>", [[<C-\><C-N>:ToggleTerm<CR>]], opts)
-          -- Ctrl+/ and Ctrl+_ to toggle (close) the terminal
-          vim.keymap.set("t", "<C-/>", [[<C-\><C-N>:lua _G.toggleterm_horizontal()<CR>]], opts)
-          vim.keymap.set("t", "<C-_>", [[<C-\><C-N>:lua _G.toggleterm_horizontal()<CR>]], opts)
-          -- Ctrl+\ to toggle (close) the floating terminal
-          vim.keymap.set("t", "<C-\\>", [[<C-\><C-N>:lua _G.toggleterm_floating()<CR>]], opts)
-        end,
-      })
-
       -- Set a timer to ensure insert mode when terminal is fully loaded
       vim.api.nvim_create_autocmd("BufEnter", {
         pattern = "term://*toggleterm*",
@@ -69,55 +43,13 @@ return {
         end,
       })
 
-      -- Function to toggle the terminal with current direction
-      _G.toggleterm_toggle = function()
-        terminal:toggle()
-      end
-
-      -- Function to change terminal direction and reopen if needed
-      _G.toggleterm_toggle_direction = function(direction)
-        local was_open = terminal:is_open()
-
-        -- If terminal is already open and in the requested direction, toggle it off/close
-        if was_open and terminal.direction == direction then
-          terminal:toggle()
-          return
-        end
-
-        -- Close current terminal if open
-        if was_open then
-          terminal:close()
-        end
-
-        -- Update terminal direction
-        terminal.direction = direction
-
-        -- Update size based on direction
-        if direction == "horizontal" then
-          terminal.size = 20
-        elseif direction == "float" then
-          terminal.size = 15
-        end
-
-        -- Reopen if it was open before
-        if was_open then
-          vim.defer_fn(function()
-            terminal:toggle()
-          end, 10)
-        else
-          -- If it wasn't open, toggle it to open in new direction
-          terminal:toggle()
-        end
-      end
-
-
-      -- Specific toggle functions for each direction
+      -- Specific toggle functions delegating to tmux_term
       _G.toggleterm_floating = function()
-        _G.toggleterm_toggle_direction("float")
+        require("util.tmux_term").toggle_float()
       end
 
       _G.toggleterm_horizontal = function()
-        _G.toggleterm_toggle_direction("horizontal")
+        require("util.tmux_term").toggle_horizontal()
       end
     end,
     keys = {
@@ -125,7 +57,8 @@ return {
       { "<A-t>", false },
       { "<A-h>", ":lua _G.toggleterm_horizontal()<CR>", desc = "Toggle horizontal terminal" },
       { "<C-\\>", ":lua _G.toggleterm_floating()<CR>", desc = "Toggle floating terminal" },
+      { "<C-/>", ":lua _G.toggleterm_horizontal()<CR>", desc = "Toggle horizontal terminal" },
+      { "<C-_>", ":lua _G.toggleterm_horizontal()<CR>", desc = "Toggle horizontal terminal" },
     },
   },
 }
-
