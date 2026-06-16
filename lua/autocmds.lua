@@ -63,3 +63,15 @@ vim.api.nvim_create_autocmd({ "UIEnter", "VimEnter", "ColorScheme", "BufEnter" }
   end,
 })
 
+-- Sync NvimTree root directory with current tab page CWD on entering a tabpage
+vim.api.nvim_create_autocmd("TabEnter", {
+  group = vim.api.nvim_create_augroup("SyncNvimTreeTabCWD", { clear = true }),
+  callback = function()
+    local ok_api, api = pcall(require, "nvim-tree.api")
+    if ok_api and api.tree.is_visible() then
+      api.tree.change_root(vim.fn.getcwd())
+    end
+  end,
+})
+
+

@@ -40,6 +40,22 @@ M.ui = {
 
         return "%#St_gitIcons# " .. branch_name .. added .. changed .. removed
       end,
+      cwd = function()
+        local config = require("nvconfig").ui.statusline
+        local sep_style = config.separator_style
+        local utils = require "nvchad.stl.utils"
+        local sep_icons = utils.separators
+        local separators = (type(sep_style) == "table" and sep_style) or sep_icons[sep_style]
+        local sep_l = separators["left"]
+
+        local icon = "%#St_cwd_icon#" .. "󰉋 "
+        local name = vim.fn.getcwd()
+        if not name or name == "" then
+          name = (vim.uv or vim.loop).cwd() or vim.fn.expand("~")
+        end
+        name = "%#St_cwd_text#" .. " " .. (name:match "([^/\\]+)[/\\]*$" or name) .. " "
+        return (vim.o.columns > 85 and ("%#St_cwd_sep#" .. sep_l .. icon .. name)) or ""
+      end,
     },
   },
 

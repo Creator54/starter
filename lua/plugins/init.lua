@@ -22,6 +22,9 @@ return {
   { import = "plugins.lint" },
   { import = "plugins.glow" },
   { import = "plugins.dap" },
+  { import = "plugins.remote-sshfs" },
+  { import = "plugins.scope" },
+  { import = "plugins.ui-select" },
 }
 
 

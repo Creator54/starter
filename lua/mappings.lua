@@ -109,6 +109,55 @@ end, { desc = "Toggle floating terminal", silent = true })
 -- Toggle NvimTree (matching LazyVim style Leader+e)
 map("n", "<leader>e", "<cmd>NvimTreeToggle<CR>", { desc = "Toggle NvimTree", silent = true })
 
+-- sshfs remote development mappings
+map("n", "<leader>rc", "<cmd>SSHConnect<CR>", { desc = "Remote SSHFS: Connect", silent = true })
+map("n", "<leader>rt", "<cmd>tabnew | SSHConnect<CR>", { desc = "Remote SSHFS: Connect in new tab", silent = true })
+map("n", "<leader>rd", function()
+  local ok, ws = pcall(require, "util.workspace")
+  if ok then
+    ws.switch_to_local()
+  else
+    vim.notify("Workspace utility not loaded", vim.log.levels.ERROR)
+  end
+end, { desc = "Workspace: switch to local", silent = true })
+map("n", "<leader>rl", function()
+  local ok, ws = pcall(require, "util.workspace")
+  if ok then
+    ws.switch_to_local()
+  else
+    vim.notify("Workspace utility not loaded", vim.log.levels.ERROR)
+  end
+end, { desc = "Workspace: switch to local", silent = true })
+
+map("n", "<leader>rf", "<cmd>SSHFiles<CR>", { desc = "Remote SSHFS: Find files", silent = true })
+map("n", "<leader>rg", "<cmd>SSHLiveGrep<CR>", { desc = "Remote SSHFS: Live grep", silent = true })
+
+-- Workspace hub & pin
+map("n", "<leader>rw", function()
+  local ok, ws = pcall(require, "util.workspace")
+  if ok then
+    ws.open_hub()
+  else
+    vim.notify("Workspace utility not loaded", vim.log.levels.ERROR)
+  end
+end, { desc = "Workspace: open hub", silent = true })
+
+map("n", "<leader>rP", function()
+  local ok, ws = pcall(require, "util.workspace")
+  if ok then
+    ws.pin_current_folder()
+  else
+    vim.notify("Workspace utility not loaded", vim.log.levels.ERROR)
+  end
+end, { desc = "Workspace: pin current folder", silent = true })
+
+-- Tabpage navigation keymaps
+map("n", "]t", "<cmd>tabnext<CR>", { desc = "Next tab page", silent = true })
+map("n", "[t", "<cmd>tabprevious<CR>", { desc = "Previous tab page", silent = true })
+map("n", "<leader>ta", "<cmd>tabnew<CR>", { desc = "New tab page", silent = true })
+map("n", "<leader>tx", "<cmd>tabclose<CR>", { desc = "Close tab page", silent = true })
+
+
 
 
 
