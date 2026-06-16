@@ -56,8 +56,20 @@ local function get_tab_id()
   return vim.t.tmux_tab_id
 end
 
-local function session_name(tab_id, direction)
-  return string.format("nvim_tab%d_%s", tab_id, direction)
+local function get_project_root(cwd)
+  local dir = cwd
+  while dir and dir ~= "" and dir ~= "/" and dir ~= "." do
+    if vim.fn.isdirectory(dir .. "/.git") == 1 or vim.fn.filereadable(dir .. "/.git") == 1 then
+      return dir
+    end
+    dir = vim.fn.fnamemodify(dir, ":h")
+  end
+  return cwd
+end
+
+local function session_name(tab_id, direction, project_root)
+  local hash = vim.fn.sha256(project_root):sub(1, 8)
+  return string.format("nvim_tab%d_%s_%s", tab_id, direction, hash)
 end
 
 -- --------------------------------------------------------------------------
@@ -149,7 +161,8 @@ end
 local function get_terminal(direction, size)
   local ws = get_workspace_info()
   local tab_id = get_tab_id()
-  local name = session_name(tab_id, direction)
+  local proj_root = get_project_root(ws.cwd)
+  local name = session_name(tab_id, direction, proj_root)
 
   _registry[tab_id] = _registry[tab_id] or {}
   _registry[tab_id][ws.host] = _registry[tab_id][ws.host] or {}
@@ -236,14 +249,18 @@ end
 
 function M.get_session_name(direction)
   local tab_id = get_tab_id()
-  return session_name(tab_id, direction)
+  local cwd = vim.fn.getcwd()
+  local proj_root = get_project_root(cwd)
+  return session_name(tab_id, direction, proj_root)
 end
 
 function M.list_sessions()
   local tab_id = get_tab_id()
+  local cwd = vim.fn.getcwd()
+  local proj_root = get_project_root(cwd)
   return {
-    float = session_name(tab_id, "float"),
-    horizontal = session_name(tab_id, "horizontal"),
+    float = session_name(tab_id, "float", proj_root),
+    horizontal = session_name(tab_id, "horizontal", proj_root),
   }
 end
 
