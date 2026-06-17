@@ -39,7 +39,9 @@ local function check_neotree_open()
     if vim.api.nvim_win_is_valid(win) then
       local buf = vim.api.nvim_win_get_buf(win)
       if vim.bo[buf].filetype == "NvimTree" then
-        return true
+        if buf ~= _tree_buf then
+          return true
+        end
       end
     end
   end
@@ -278,14 +280,20 @@ function M.switch_worktree(path, opts_switch)
     return
   end
 
-  -- Detect if Nvim-tree is open before shutting down the session
+  -- Detect if Nvim-tree or Worktree sidebar is open before shutting down the session
   local neotree_was_open = check_neotree_open()
+  local worktree_was_open = false
+  if opts_switch.reopen_worktree or (_tree_win and vim.api.nvim_win_is_valid(_tree_win)) then
+    worktree_was_open = true
+    neotree_was_open = false -- Mutually exclusive: if worktree is open, NvimTree cannot be open
+  end
 
   -- 1. Store active file path to preserve focus
   vim.g.SessionLastFile = vim.fn.expand("%:p")
 
-  -- 2. Close Nvim-tree sidebar and clear arglist to prevent session pollution
+  -- 2. Close sidebars and clear arglist to prevent session pollution
   pcall(vim.cmd, "NvimTreeClose")
+  M.close_tree()
   pcall(vim.cmd, "%argdelete")
 
   -- 3. Wipe out directory buffers
@@ -327,11 +335,22 @@ function M.switch_worktree(path, opts_switch)
     require("persistence").start()
   end)
 
-  -- 9. Restore Nvim-tree sidebar if it was open previously (unless skipped)
-  if not opts_switch.skip_neotree and neotree_was_open then
-    vim.defer_fn(function()
-      pcall(vim.cmd, "NvimTreeOpen")
-    end, 300)
+  -- 9. Restore Nvim-tree or Worktree sidebar if they were open previously (unless skipped)
+  if not opts_switch.skip_neotree then
+    if neotree_was_open then
+      vim.defer_fn(function()
+        pcall(vim.cmd, "NvimTreeOpen")
+      end, 500)
+    end
+    
+    if worktree_was_open then
+      vim.schedule(function()
+        -- Wait a brief moment to ensure all persistence UI glitches settle
+        vim.defer_fn(function()
+          pcall(M.toggle_tree)
+        end, 100)
+      end)
+    end
   end
 
   -- 10. Fire completion callback
@@ -626,9 +645,278 @@ function M.merge_worktree(wt)
   end)
 end
 
+function M.rename_worktree(wt, on_done)
+  if M.is_default_branch(wt.branch) then
+    vim.notify("Cannot rename default branch '" .. wt.branch .. "'", vim.log.levels.ERROR, { title = "Git Worktree" })
+    return
+  end
+
+  M.unified_input("Rename Worktree (" .. wt.branch .. ")", function(new_name)
+    if not new_name or new_name == "" or new_name == wt.branch then
+      return
+    end
+
+    -- 1. Rename branch
+    local out =
+      vim.fn.system(string.format("git branch -m %s %s", vim.fn.shellescape(wt.branch), vim.fn.shellescape(new_name)))
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Failed to rename branch: " .. out, vim.log.levels.ERROR, { title = "Git Worktree" })
+      return
+    end
+
+    -- 2. Try to move directory
+    if not wt.is_current then
+      local old_path = wt.path
+      local parent_dir = vim.fn.fnamemodify(old_path, ":h")
+      local new_path = parent_dir .. "/" .. new_name
+
+      if vim.fn.isdirectory(new_path) == 0 then
+        local move_out =
+          vim.fn.system(string.format("git worktree move %s %s", vim.fn.shellescape(old_path), vim.fn.shellescape(new_path)))
+        if vim.v.shell_error ~= 0 then
+          vim.notify("Branch renamed, but failed to move directory: " .. move_out, vim.log.levels.WARN, { title = "Git Worktree" })
+        else
+          vim.notify("Renamed worktree to " .. new_name, vim.log.levels.INFO, { title = "Git Worktree" })
+        end
+      else
+        vim.notify(
+          "Branch renamed, but directory " .. new_path .. " already exists. Skipping move.",
+          vim.log.levels.WARN,
+          { title = "Git Worktree" }
+        )
+      end
+    else
+      vim.notify(
+        "Branch renamed. Path cannot be moved while active.",
+        vim.log.levels.INFO,
+        { title = "Git Worktree" }
+      )
+    end
+
+    if on_done then
+      on_done()
+    end
+  end)
+end
+
 -----------------------------------------------------------------------
 -- Floating Worktree UI
 -----------------------------------------------------------------------
+
+local _tree_win = nil
+local _tree_buf = nil
+
+function M.close_tree()
+  if _tree_win and vim.api.nvim_win_is_valid(_tree_win) then
+    local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+    if #tab_wins > 1 then
+      vim.api.nvim_win_close(_tree_win, true)
+    else
+      pcall(vim.cmd, "enew")
+    end
+    _tree_win = nil
+    -- Force tabline recalculation
+    vim.cmd("redrawtabline")
+  end
+end
+
+function M.toggle_tree()
+  if _tree_win and vim.api.nvim_win_is_valid(_tree_win) then
+    M.close_tree()
+    return
+  end
+
+  if not M.in_git_repo() then
+    vim.notify("Not inside a Git repository", vim.log.levels.ERROR, { title = "Git Worktree" })
+    return
+  end
+
+  -- Mutual Exclusion: Close NvimTree before opening Worktree
+  pcall(vim.cmd, "NvimTreeClose")
+
+  local worktrees = M.get_worktrees()
+  if #worktrees == 0 then
+    vim.notify("No worktrees found", vim.log.levels.WARN, { title = "Git Worktree" })
+    return
+  end
+
+  -- Create buffer if it doesn't exist
+  if not _tree_buf or not vim.api.nvim_buf_is_valid(_tree_buf) then
+    _tree_buf = vim.api.nvim_create_buf(false, true)
+    
+    -- IMPORTANT: Set buftype BEFORE name to prevent Neovim from thinking it's a real file
+    vim.bo[_tree_buf].buftype = "nofile"
+    vim.bo[_tree_buf].filetype = "NvimTree" -- Recognized by NvChad for offset
+    vim.bo[_tree_buf].bufhidden = "wipe"
+    vim.bo[_tree_buf].swapfile = false
+    vim.bo[_tree_buf].buflisted = false
+    vim.b[_tree_buf].tabufline_ignore = true
+    
+    -- Set name to something NvChad recognizes as a sidebar
+    pcall(vim.api.nvim_buf_set_name, _tree_buf, "NvimTree_1")
+  end
+
+  -- Open window on the left with fixed width
+  vim.cmd("silent! topleft 30vsplit")
+  _tree_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(_tree_win, _tree_buf)
+
+  -- Window options
+  vim.wo[_tree_win].winfixwidth = true
+  vim.wo[_tree_win].number = false
+  vim.wo[_tree_win].relativenumber = false
+  vim.wo[_tree_win].statuscolumn = ""
+  vim.wo[_tree_win].signcolumn = "no"
+  vim.wo[_tree_win].foldcolumn = "0"
+  vim.wo[_tree_win].wrap = false
+  vim.wo[_tree_win].winhl = "WinSeparator:Comment"
+  
+  -- Force width and UI refresh
+  vim.api.nvim_win_set_width(_tree_win, 30)
+  
+  -- Robust layout refresh
+  local function force_ui_refresh()
+    vim.cmd("redrawtabline")
+    vim.api.nvim_exec_autocmds("VimResized", {})
+  end
+  
+  force_ui_refresh()
+
+  -- Persistent fix for the tabline overlap glitch (triggers on all layout changes)
+  vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter", "VimResized", "TabEnter" }, {
+    group = vim.api.nvim_create_augroup("WorktreeUIStable", { clear = true }),
+    callback = function()
+      if _tree_win and vim.api.nvim_win_is_valid(_tree_win) then
+        vim.cmd("redrawtabline")
+      end
+    end,
+  })
+
+  local function render()
+    if not vim.api.nvim_buf_is_valid(_tree_buf) then
+      return
+    end
+
+    local wts = M.get_worktrees()
+    local win_width = vim.api.nvim_win_is_valid(_tree_win) and vim.api.nvim_win_get_width(_tree_win) or 30
+    local divider = " " .. string.rep("─", win_width - 2)
+    local lines = {
+      " 󰙅 WORKTREES ",
+      divider,
+      " 󰐕 Add New Worktree",
+      "",
+    }
+    local wt_mapping = {}
+    wt_mapping[3] = { type = "add" }
+
+    for _, wt in ipairs(wts) do
+      local icon = wt.is_current and " ● " or " ○ "
+      local suffix = wt.is_default and " (default)" or ""
+      local line_str = string.format("%s%s%s", icon, wt.branch or "(no branch)", suffix)
+      table.insert(lines, line_str)
+      wt_mapping[#lines] = { type = "worktree", data = wt }
+    end
+
+    vim.bo[_tree_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(_tree_buf, 0, -1, false, lines)
+    vim.bo[_tree_buf].modifiable = false
+
+    -- Highlights
+    local ns = vim.api.nvim_create_namespace("git_worktree_tree")
+    vim.api.nvim_buf_clear_namespace(_tree_buf, ns, 0, -1)
+    
+    -- Colors matching NvChad aesthetic but more vibrant
+    vim.api.nvim_buf_add_highlight(_tree_buf, ns, "Directory", 0, 0, -1) -- Header
+    vim.api.nvim_buf_add_highlight(_tree_buf, ns, "Comment", 1, 0, -1)   -- Divider
+    vim.api.nvim_buf_add_highlight(_tree_buf, ns, "Keyword", 2, 0, -1)   -- Add Action
+
+    for lnum, item in pairs(wt_mapping) do
+      local line_idx = lnum - 1
+      if item.type == "worktree" then
+        local wt = item.data
+        if wt.is_current then
+          -- Vibrant for active
+          vim.api.nvim_buf_add_highlight(_tree_buf, ns, "DiagnosticOk", line_idx, 0, 5) -- Green icon
+          vim.api.nvim_buf_add_highlight(_tree_buf, ns, "Directory", line_idx, 5, -1)    -- Blue branch name
+        else
+          -- Subtle for inactive
+          vim.api.nvim_buf_add_highlight(_tree_buf, ns, "Comment", line_idx, 0, 5)      -- Gray icon
+          vim.api.nvim_buf_add_highlight(_tree_buf, ns, "Normal", line_idx, 5, -1)       -- Default text
+        end
+      end
+    end
+
+    return wt_mapping
+  end
+
+  local wt_mapping = render()
+
+  -- Keymaps
+  local function get_selected_item()
+    local cursor = vim.api.nvim_win_get_cursor(_tree_win)
+    return wt_mapping[cursor[1]]
+  end
+
+  local map_opts = { buffer = _tree_buf, nowait = true, silent = true, noremap = true }
+
+  -- CR: Switch
+  vim.keymap.set("n", "<CR>", function()
+    local item = get_selected_item()
+    if item then
+      if item.type == "add" then
+        M.prompt_create()
+      elseif item.type == "worktree" then
+        M.switch_worktree(item.data.path, { reopen_worktree = true })
+      end
+    end
+  end, map_opts)
+
+  -- a: Add
+  vim.keymap.set("n", "a", function()
+    M.prompt_create()
+  end, map_opts)
+
+  -- d: Delete
+  vim.keymap.set("n", "d", function()
+    local item = get_selected_item()
+    if item and item.type == "worktree" then
+      M.delete_worktree(item.data)
+      wt_mapping = render()
+    end
+  end, map_opts)
+
+  -- r: Rename
+  vim.keymap.set("n", "r", function()
+    local item = get_selected_item()
+    if item and item.type == "worktree" then
+      if M.rename_worktree then
+        M.rename_worktree(item.data, function()
+          wt_mapping = render()
+        end)
+      else
+        vim.notify("Rename not implemented", vim.log.levels.WARN)
+      end
+    end
+  end, map_opts)
+
+  -- m: Merge
+  vim.keymap.set("n", "m", function()
+    local item = get_selected_item()
+    if item and item.type == "worktree" then
+      M.merge_worktree(item.data)
+      wt_mapping = render()
+    end
+  end, map_opts)
+
+  -- R: Refresh
+  vim.keymap.set("n", "R", function()
+    wt_mapping = render()
+  end, map_opts)
+
+  -- Close keys
+  vim.keymap.set("n", "q", M.close_tree, map_opts)
+  vim.keymap.set("n", "<Esc>", M.close_tree, map_opts)
+end
 
 function M.open_hub()
   if not M.in_git_repo() then

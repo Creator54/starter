@@ -36,7 +36,14 @@ map("n", "<A-Left>", ":vertical resize -2<CR>", { desc = "Resize window left", s
 map("n", "<A-Right>", ":vertical resize +2<CR>", { desc = "Resize window right", silent = true })
 
 -- Quick save & quit
-map("n", "<leader>w", "<cmd>w<CR>", { desc = "Save file", silent = true })
+map("n", "<leader>w", function()
+  local ok, wt = pcall(require, "util.worktree")
+  if ok then
+    wt.toggle_tree()
+  else
+    vim.notify("Git worktree utility not loaded", vim.log.levels.ERROR)
+  end
+end, { desc = "Toggle Git Worktree Tree", silent = true })
 map("n", "<leader>q", "<cmd>q<CR>", { desc = "Quit buffer", silent = true })
 map("n", "<leader><space>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlights", silent = true })
 map("n", "<F8>", "<cmd>set spell!<CR>", { desc = "Toggle spelling", silent = true })
@@ -107,7 +114,13 @@ map({ "n", "t" }, "<C-\\>", function()
 end, { desc = "Toggle floating terminal", silent = true })
 
 -- Toggle NvimTree (matching LazyVim style Leader+e)
-map("n", "<leader>e", "<cmd>NvimTreeToggle<CR>", { desc = "Toggle NvimTree", silent = true })
+map("n", "<leader>e", function()
+  local ok, wt = pcall(require, "util.worktree")
+  if ok then
+    wt.close_tree()
+  end
+  vim.cmd("NvimTreeToggle")
+end, { desc = "Toggle NvimTree", silent = true })
 
 -- sshfs remote development mappings
 map("n", "<leader>rc", "<cmd>SSHConnect<CR>", { desc = "Remote SSHFS: Connect", silent = true })
