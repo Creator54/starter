@@ -12,7 +12,7 @@ map("n", "<A-S>", "<cmd>:Lazy sync<cr>", { desc = "Lazy sync", silent = true })
 -- Bufferline / Tabufline cycle & close
 map("n", "<A-`>", function() require("nvchad.tabufline").next() end, { desc = "Cycle forward through buffers", silent = true })
 map("n", "<A-S-`>", function() require("nvchad.tabufline").prev() end, { desc = "Cycle backward through buffers", silent = true })
-map("n", "<C-d>", function() require("nvchad.tabufline").close_buffer() end, { desc = "Close current buffer", silent = true })
+map("n", "<leader>x", function() require("nvchad.tabufline").close_buffer() end, { desc = "Close current buffer", silent = true })
 map("n", "<S-l>", function() require("nvchad.tabufline").next() end, { desc = "Next buffer", silent = true })
 map("n", "<S-h>", function() require("nvchad.tabufline").prev() end, { desc = "Previous buffer", silent = true })
 
