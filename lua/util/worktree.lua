@@ -166,7 +166,7 @@ function M.unified_confirm(title_text, callback)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
     "",
-    "  [y] Yes      [n] No / Cancel",
+    "       [y] Yes      [n] No / Cancel       ",
   })
   vim.bo[buf].modifiable = false
 
@@ -174,8 +174,27 @@ function M.unified_confirm(title_text, callback)
   local ns = vim.api.nvim_create_namespace("git_worktree_confirm")
   vim.api.nvim_buf_add_highlight(buf, ns, "Comment", 1, 0, -1)
 
-  -- Position cursor on the 'y' choice (line 2, column 3)
-  pcall(vim.api.nvim_win_set_cursor, win, { 2, 3 })
+  -- Track selected option
+  local selected_yes = true
+
+  local function render_selection()
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+    vim.bo[buf].modifiable = true
+    if selected_yes then
+      vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "       [y] Yes      [n] No / Cancel       " })
+      vim.api.nvim_buf_add_highlight(buf, ns, "DiagnosticOk", 1, 7, 14)
+      vim.api.nvim_buf_add_highlight(buf, ns, "Comment", 1, 20, -1)
+      pcall(vim.api.nvim_win_set_cursor, win, { 2, 8 })
+    else
+      vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "       [y] Yes      [n] No / Cancel       " })
+      vim.api.nvim_buf_add_highlight(buf, ns, "Comment", 1, 7, 14)
+      vim.api.nvim_buf_add_highlight(buf, ns, "DiagnosticError", 1, 20, -1)
+      pcall(vim.api.nvim_win_set_cursor, win, { 2, 21 })
+    end
+    vim.bo[buf].modifiable = false
+  end
+
+  render_selection()
 
   local closed = false
   local function close_win()
@@ -190,6 +209,23 @@ function M.unified_confirm(title_text, callback)
 
   local map_opts = { buffer = buf, nowait = true, silent = true, noremap = true }
 
+  -- Prevent NvChad buffer cycling in this floating window
+  local nop_keys = { "]b", "[b", "<S-h>", "<S-l>" }
+  for _, key in ipairs(nop_keys) do
+    vim.keymap.set("n", key, "<Nop>", map_opts)
+  end
+
+  -- Toggle logic
+  local function toggle()
+    selected_yes = not selected_yes
+    render_selection()
+  end
+
+  local toggle_keys = { "<Tab>", "<S-Tab>", "<Left>", "<Right>", "h", "l" }
+  for _, key in ipairs(toggle_keys) do
+    vim.keymap.set("n", key, toggle, map_opts)
+  end
+
   -- Confirm options
   vim.keymap.set("n", "y", function()
     close_win()
@@ -198,7 +234,7 @@ function M.unified_confirm(title_text, callback)
 
   vim.keymap.set("n", "<CR>", function()
     close_win()
-    callback(true)
+    callback(selected_yes)
   end, map_opts)
 
   vim.keymap.set("n", "n", function()
@@ -754,6 +790,12 @@ function M.toggle_tree()
     
     -- Set name to something NvChad recognizes as a sidebar
     pcall(vim.api.nvim_buf_set_name, _tree_buf, "NvimTree_1")
+
+    -- Prevent NvChad buffer cycling in this sidebar window
+    local nop_keys = { "]b", "[b", "<S-h>", "<S-l>" }
+    for _, key in ipairs(nop_keys) do
+      vim.keymap.set("n", key, "<Nop>", { buffer = _tree_buf, silent = true, noremap = true })
+    end
   end
 
   -- Open window on the left with fixed width
