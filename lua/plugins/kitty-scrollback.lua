@@ -5,7 +5,11 @@ return {
     lazy = true,
     cmd = { "KittyScrollbackGenerateKittens", "KittyScrollbackCheckHealth" },
     event = { "User KittyScrollbackLaunch" },
-    opts = {},
+    opts = {
+      {
+        paste_window = { yank_register_enabled = false },
+      }
+    },
     config = function(_, opts)
       require("kitty-scrollback").setup(opts)
 
